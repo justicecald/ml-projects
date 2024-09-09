@@ -15,7 +15,12 @@ class ConvolutionalNeuralNetwork_2D(_ConvolutionArithmetic):
 
     def convlutional_activation_layer(self):
         pass
+    
+    def linear_layer(self):
+        pass
 
     def Conv2D(self):
         pass
 
+    def reLu(self, v):
+        return np.max(v, 0.)
