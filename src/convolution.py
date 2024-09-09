@@ -23,4 +23,4 @@ class ConvolutionalNeuralNetwork_2D(_ConvolutionArithmetic):
         pass
 
     def reLu(self, v):
-        return np.max(v, 0.)
+        return np.maximum(v, 0.)
