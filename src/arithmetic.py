@@ -1,17 +1,31 @@
 import pandas as pd
 import numpy as np
-from torch import nn
+from torch import nn, Tensor, empty
 
-class _ConvolutionArithmetic:
-    """
-    Referencing:
-    - A guide to convolution arithmetic for deep learning (https://arxiv.org/pdf/1603.07285)
-    """
-    def __init__(self):
-        pass
+from collections import *
 
-    @staticmethod
-    def padding_2d(input, kernel, stride=1, padding_type='valid'):
+"""
+Referencing:
+- A guide to convolution arithmetic for deep learning (https://arxiv.org/pdf/1603.07285)
+"""
+class _ConvolutionArithmetic(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding_type='valid'):
+        super(_ConvolutionArithmetic, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.weights = np.random.rand(self.out_channels, self.in_channels, *kernel_size) * np.sqrt(2 / in_channels)
+        self.bias = np.random.rand(self.out_channels) * np.sqrt(2 / in_channels)
+        
+        print(f"Weight Shape: {self.weights.shape}")
+        print(f"Weights: {self.weights}")
+    
+    def state_dict(self):
+        return OrderedDict({
+            "weight": Tensor(self.weights),
+            "bias": Tensor(self.bias)
+        })
+    
+    def padding_2d(input, kernel, stride, padding_type='valid'):
         """
         Using zero padding mode, i.e., creating desired size for output
         """
@@ -39,7 +53,6 @@ class _ConvolutionArithmetic:
                 print("Non-unit strides not supported at this time")
                 return
 
-    @staticmethod
     def channel_convolution_2D(input, kernel, stride=1, padding=0):
         if stride != 1:
             print('Non-unit stride not supported for convolution layer')
@@ -73,12 +86,14 @@ class _ConvolutionArithmetic:
     def perform_convolution_2D(self, input, stride, channels):
         pass
 
-# if __name__ == '__main__':
-#     l = np.random.rand(5, 5)
-#     k = np.random.rand(3, 3)
+    def forward(self, x):
+        pass
 
-#     l_padded = _ConvolutionArithmetic.padding_2d(l, k)
+if __name__ == '__main__':
+    l = np.random.rand(5, 5)
+    k = np.random.rand(3, 3)
 
-#     print(_ConvolutionArithmetic.channel_convolution_2D(l_padded, k, padding=((l_padded.shape[0] - l.shape[0]) / 2)))
+    a = _ConvolutionArithmetic(1, 3, (3,3), 1, 0)
+
 
 
