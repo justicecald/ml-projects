@@ -19,16 +19,16 @@ class U_Net_Convolution:
         time_embedding = np.concatenate((np.sin(time_embedding), np.cos(time_embedding)), axis=1)
         print(f"Time Embedding Shape: {time_embedding.shape}")
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.imshow(time_embedding)
-        ax.set_aspect('auto')
-        fig.savefig('equal.png')
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        # ax.imshow(time_embedding)
+        # ax.set_aspect('auto')
+        # fig.savefig('equal.png')
 
-        return
+        return time_embedding
     
 
-if __name__ == "__main__":
-    time_steps = np.linspace(start=1e-4, stop=0.002, num=1000)
-    time_embedding = U_Net_Convolution.time_position_embedd(time_steps=np.array(range(0, len(time_steps))), time_embed_dim=32)
+# if __name__ == "__main__":
+#     time_steps = np.linspace(start=1e-4, stop=0.002, num=1000)
+#     time_embedding = U_Net_Convolution.time_position_embedd(time_steps=np.array(range(0, len(time_steps))), time_embed_dim=32)
     
