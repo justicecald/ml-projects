@@ -3,7 +3,7 @@ import numpy as np
 from torch import nn
 from torch import Tensor, cat, empty, autograd
 import torch
-
+import matplotlib.pyplot as plt
 from collections import *
 
 """
@@ -117,14 +117,53 @@ class _ConvolutionArithmetic(nn.Module):
     def backward(self, output):
         return output.backward(gradient=Tensor(np.ones(tuple([d for d in output.shape]))))
 
+class _AttentionArithmetic(nn.Module):
+    def __init__(self, batch_dim, embed_dim):
+        super(_AttentionArithmetic, self).__init__()
+        self.batch_dim = batch_dim
+        self.embed_dim = torch.Tensor([embed_dim])
+        self.bias = None
+    
+    def forward(self, x):
+        query: torch.Tensor
+        key: torch.Tensor
+        value: torch.Tensor
 
-# if __name__ == '__main__':
-#     l = np.random.rand(3, 64, 64)
-#     a = _ConvolutionArithmetic(3, 64, (3, 3), 1, padding_type='valid')
-#     output = a(l)
-#     output = output.sum()
-#     output.backward()
-#     print(f"dO / dW:\n{a.weights.grad}\ndO / dB:\n{a.bias.grad}")
+        query = x
+        key = x
+        value = x
+
+        query_key_product = torch.matmul(query, key.transpose(1, 0))
+        softmax_arg = torch.div(query_key_product, torch.sqrt(self.embed_dim))
+        softmax = torch.softmax(softmax_arg, dim=0)
+
+        attention = torch.matmul(softmax, value)
+
+        return attention
+
+
+
+
+
+if __name__ == '__main__':
+    # l = np.random.rand(3, 64, 64)
+    # a = _ConvolutionArithmetic(3, 64, (3, 3), 1, padding_type='valid')
+    # output = a(l)
+    # output = output.sum()
+    # output.backward()
+    # print(f"dO / dW:\n{a.weights.grad}\ndO / dB:\n{a.bias.grad}")
+    hello_my_dear_friend_encoded = torch.Tensor([[0.5, 0.1, 0.4, 0.3], [0.2, 0.3, 0.1, 0.7], [0.6, 0.9, 0.3, 0.1], 	[0.4, 0.2, 0.5, 0.8]])
+    self_attention = _AttentionArithmetic(*hello_my_dear_friend_encoded.shape)
+    output = self_attention(hello_my_dear_friend_encoded)
+    print(output)
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.imshow(output)
+    ax1.set_aspect('auto')
+    fig.savefig('equal.png')
+
+
 
     
 
