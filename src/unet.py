@@ -39,26 +39,33 @@ class ResNet_SelfAttention(nn.Module):
         self.embedding_dim = t_emb_dim
         self.module_list = []
         self.sequence = None
+
+        # Building the sequence
     
     def _build_resnet(self):
         # Build the first Resnet block by default:
         self.module_list.append(
             nn.GroupNorm(num_groups=8, num_channels=self.in_channels),
-            nn.ReLU(),
+            nn.SiLU(),
             ConvolutionalNeuralNetwork_2D(in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=(3,3), stride=1, padding_type='same')
         )
     
     def _build_time_embedding(self):
         self.module_list.append(
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Linear(in_features=self.embedding_dim, out_features=self.out_channels)
         )
 
     def _build_self_attention_norm(self):
         self.module_list.append(
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Linear(in_features=self.embedding_dim, out_features=self.out_channels)
         )
+
+    def forward(self, x):
+        # Unpacking the build layers based on what was build
+        self.sequence = nn.Sequential(*self.module_list)
+
 
 
     

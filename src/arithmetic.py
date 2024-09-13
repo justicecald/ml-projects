@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
+import torch
 from torch import nn
 from torch import Tensor, cat, empty, autograd
-import torch
 import matplotlib.pyplot as plt
 from collections import *
 
@@ -118,22 +118,48 @@ class _ConvolutionArithmetic(nn.Module):
         return output.backward(gradient=Tensor(np.ones(tuple([d for d in output.shape]))))
 
 class _AttentionArithmetic(nn.Module):
-    def __init__(self, batch_dim, embed_dim):
+    def __init__(self, batch_dim, embed_dim, num_heads):
         super(_AttentionArithmetic, self).__init__()
-        self.batch_dim = batch_dim
+        self.batch_dim = torch.Tensor([batch_dim])
         self.embed_dim = torch.Tensor([embed_dim])
+        self.num_heads = torch.Tensor([num_heads])
         self.bias = None
+
+        # Defining the Wq, Wk, Wv matrices as a single linear layer:
+        # Referencing how they are used individually as matrices (d_embed x d_embed), we will "concatenate" the matrices along dim=1
+        self.attention_weights = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
+
+        # Defining Wo as a single linear layer
+        self.multihead_attention_weights = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+
+        # Dimensions of heads as defined
+        self.head_dim = self.embed_dim // self.num_heads
     
-    def forward(self, x):
+    def forward(self, x, causal_mask=False):
         query: torch.Tensor
         key: torch.Tensor
         value: torch.Tensor
 
-        query = x
-        key = x
-        value = x
+        input_shape = x.shape
+        batch_size, sequence_length, embed_dim = input_shape
 
-        query_key_product = torch.matmul(query, key.transpose(1, 0))
+        intermediate_head_split_shape = (batch_size, sequence_length, self.num_heads, self.head_dim)
+
+        # Copying the input into query, key, value for the multihead input
+        query, key, value = self.attention_weights(x).chunk(3, dim=-1)
+
+        query = query.view(intermediate_head_split_shape).transpose(1, 2)
+        key = key.view(intermediate_head_split_shape).transpose(1, 2)
+        value = value.view(intermediate_head_split_shape).transpose(1, 2)
+
+        # Computing the matrix multiplication for the arg of softmax (Q * K.transpose())
+        query_key_product = query @ key.transpose(-1, -2)
+
+        if causal_mask:
+            # Setting a mask of upper diagnol commponents (above the principal diagnol)
+            mask = torch.ones_like(query_key_product, dtype=torch.bool).triu(1)
+            query_key_product.masked_fill_(mask, -torch.inf)
+
         softmax_arg = torch.div(query_key_product, torch.sqrt(self.embed_dim))
         softmax = torch.softmax(softmax_arg, dim=0)
 
@@ -141,27 +167,27 @@ class _AttentionArithmetic(nn.Module):
 
         return attention
 
-
-
-
-
 if __name__ == '__main__':
+    l = nn.Linear(3, 6, bias=False)
+    print(l.weight.shape)
+    o = l(torch.rand([5, 5, 3]))
+    print(o.shape)
     # l = np.random.rand(3, 64, 64)
     # a = _ConvolutionArithmetic(3, 64, (3, 3), 1, padding_type='valid')
     # output = a(l)
     # output = output.sum()
     # output.backward()
     # print(f"dO / dW:\n{a.weights.grad}\ndO / dB:\n{a.bias.grad}")
-    hello_my_dear_friend_encoded = torch.Tensor([[0.5, 0.1, 0.4, 0.3], [0.2, 0.3, 0.1, 0.7], [0.6, 0.9, 0.3, 0.1], 	[0.4, 0.2, 0.5, 0.8]])
-    self_attention = _AttentionArithmetic(*hello_my_dear_friend_encoded.shape)
-    output = self_attention(hello_my_dear_friend_encoded)
-    print(output)
+    # hello_my_dear_friend_encoded = torch.Tensor([[0.5, 0.1, 0.4, 0.3], [0.2, 0.3, 0.1, 0.7], [0.6, 0.9, 0.3, 0.1], 	[0.4, 0.2, 0.5, 0.8]])
+    # self_attention = _AttentionArithmetic(*hello_my_dear_friend_encoded.shape)
+    # output = self_attention(hello_my_dear_friend_encoded)
+    # print(output)
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    ax1.imshow(output)
-    ax1.set_aspect('auto')
-    fig.savefig('equal.png')
+    # fig = plt.figure()
+    # ax1 = fig.add_subplot(111)
+    # ax1.imshow(output)
+    # ax1.set_aspect('auto')
+    # fig.savefig('equal.png')
 
 
 
