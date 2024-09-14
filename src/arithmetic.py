@@ -164,6 +164,8 @@ class _AttentionArithmetic(nn.Module):
         softmax = torch.softmax(softmax_arg, dim=0)
 
         attention = torch.matmul(softmax, value)
+        
+        output = self.multihead_attention_weights(attention)
 
         return attention
 
