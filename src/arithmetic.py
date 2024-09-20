@@ -153,19 +153,26 @@ class _AttentionArithmetic(nn.Module):
         value = value.view(intermediate_head_split_shape).transpose(1, 2)
 
         # Computing the matrix multiplication for the arg of softmax (Q * K.transpose())
-        query_key_product = query @ key.transpose(-1, -2)
+        softmax_arg = query @ key.transpose(-1, -2)
 
         if causal_mask:
             # Setting a mask of upper diagnol commponents (above the principal diagnol)
-            mask = torch.ones_like(query_key_product, dtype=torch.bool).triu(1)
-            query_key_product.masked_fill_(mask, -torch.inf)
+            mask = torch.ones_like(softmax_arg, dtype=torch.bool).triu(1)
+            softmax_arg.masked_fill_(mask, -torch.inf)
 
-        softmax_arg = torch.div(query_key_product, torch.sqrt(self.embed_dim))
-        softmax = torch.softmax(softmax_arg, dim=0)
+        softmax_arg /= torch.sqrt(self.head_dim)
 
-        attention = torch.matmul(softmax, value)
+        softmax_output = nn.functional.softmax(softmax_arg, dim=-1)
 
-        return attention
+        attention = softmax_output @ value
+
+        attention = attention.transpose(1, 2)
+
+        multihead_attention_input = attention.reshape(input_shape)
+
+        output = self.multihead_attention_weights(multihead_attention_input)
+
+        return output
 
 if __name__ == '__main__':
     l = nn.Linear(3, 6, bias=False)
