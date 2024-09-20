@@ -3,14 +3,17 @@ import numpy as np
 import torch
 from torch import nn
 from convolution import ConvolutionalNeuralNetwork_2D
+from arithmetic import _AttentionArithmetic
 import matplotlib.pyplot as plt
 
-class U_Net_Convolution(nn.Module):
+class Diffusion(nn.Module):
     def __init__(self):
-        super(U_Net_Convolution, self).__init__()
+        super(Diffusion, self).__init__()
+        self.time_embedding = self.time_position_embedding(1000, 120)
+        self.unet = unet()
+        self.final_layer = unet_output_layer()
 
-    @staticmethod
-    def time_position_embedd(time_steps, time_embed_dim):
+    def time_position_embedding(self, time_steps, time_embed_dim):
         denom_fact = 10000 ** (torch.arange(start=0, end=(time_embed_dim//2)) / (time_embed_dim // 2))
         time_embedding = time_steps[:, None].repeat(time_embed_dim//2, 1) / denom_fact
 
@@ -29,25 +32,48 @@ class U_Net_Convolution(nn.Module):
 
         return time_embedding
     
-class ResNet_SelfAttention(nn.Module):
-    def __init__(self, in_channels, out_channels, num_heads=None, t_emb_dim=None, embed=False):
-        super(ResNet_SelfAttention, self).__init__()
+    def forward(self, x):
+        # Defining the time embedding
+        time_step = torch.rand(0, self.time_embedding.shape[0])
+        time = self.time_embedding[time_step]
+
+        input_shape = x.shape
+
+        unet_output = self.unet(x, time)
+
+        final_layer_unet_output = self.final_layer(unet_output)
+
+    
+class ResNet(nn.Module):
+    def __init__(self, in_channels, out_channels, time_embedding, num_heads=None, t_emb_dim=None, embed=False):
+        super(ResNet, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.embed = embed
         self.num_heads = num_heads
         self.embedding_dim = t_emb_dim
+        self.time_embedding = time_embedding
         self.module_list = []
+        self.embed_time = self._build_time_embedding(self.time_embedding)
         self.sequence = None
 
-        # Building the sequence
+    def _build_down_block(self):
+        self._build_first_resnet()
     
-    def _build_resnet(self):
+    def _build_first_resnet(self):
         # Build the first Resnet block by default:
         self.module_list.append(
             nn.GroupNorm(num_groups=8, num_channels=self.in_channels),
             nn.SiLU(),
             ConvolutionalNeuralNetwork_2D(in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=(3,3), stride=1, padding_type='same')
+        )
+
+    def _build_second_resnet(self):
+        # Build the first Resnet block by default:
+        self.module_list.append(
+            nn.GroupNorm(num_groups=8, num_channels=self.out_channels),
+            nn.SiLU(),
+            ConvolutionalNeuralNetwork_2D(in_channels=self.out_channels, out_channels=self.out_channels, kernel_size=(3,3), stride=1, padding_type='same')
         )
     
     def _build_time_embedding(self):
@@ -56,10 +82,23 @@ class ResNet_SelfAttention(nn.Module):
             nn.Linear(in_features=self.embedding_dim, out_features=self.out_channels)
         )
 
-    def _build_self_attention_norm(self):
+    def _add_time_embedding(self, time_embedding, time_step, x):
+        return x + time_embedding[time_step]
+
+    def _build_self_attention_norm(self, batch, embed_dim, num_heads):
         self.module_list.append(
-            nn.SiLU(),
-            nn.Linear(in_features=self.embedding_dim, out_features=self.out_channels)
+            nn.GroupNorm(8, self.out_channels),
+            _AttentionArithmetic(batch, embed_dim, num_heads),
+        )
+
+    def _build_down_sample(self, out_channels):
+        self.module_list.append(
+            nn.AvgPool2d(kernel_size=4, stride=2, padding=1)
+        )
+
+    def _build_input_residual(self, in_channels, out_channels):
+        self.module_list.append(
+            ConvolutionalNeuralNetwork_2D(in_channels=in_channels, out_channels=out_channels, kernel_size=(1,1))
         )
 
     def forward(self, x):
