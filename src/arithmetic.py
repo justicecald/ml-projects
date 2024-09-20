@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
+import torch
 from torch import nn
 from torch import Tensor, cat, empty, autograd
-import torch
-
+import matplotlib.pyplot as plt
 from collections import *
 
 """
@@ -117,14 +117,86 @@ class _ConvolutionArithmetic(nn.Module):
     def backward(self, output):
         return output.backward(gradient=Tensor(np.ones(tuple([d for d in output.shape]))))
 
+class _AttentionArithmetic(nn.Module):
+    def __init__(self, batch_dim, embed_dim, num_heads):
+        super(_AttentionArithmetic, self).__init__()
+        self.batch_dim = torch.Tensor([batch_dim])
+        self.embed_dim = torch.Tensor([embed_dim])
+        self.num_heads = torch.Tensor([num_heads])
+        self.bias = None
 
-# if __name__ == '__main__':
-#     l = np.random.rand(3, 64, 64)
-#     a = _ConvolutionArithmetic(3, 64, (3, 3), 1, padding_type='valid')
-#     output = a(l)
-#     output = output.sum()
-#     output.backward()
-#     print(f"dO / dW:\n{a.weights.grad}\ndO / dB:\n{a.bias.grad}")
+        # Defining the Wq, Wk, Wv matrices as a single linear layer:
+        # Referencing how they are used individually as matrices (d_embed x d_embed), we will "concatenate" the matrices along dim=1
+        self.attention_weights = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
+
+        # Defining Wo as a single linear layer
+        self.multihead_attention_weights = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+
+        # Dimensions of heads as defined
+        self.head_dim = self.embed_dim // self.num_heads
+    
+    def forward(self, x, causal_mask=False):
+        query: torch.Tensor
+        key: torch.Tensor
+        value: torch.Tensor
+
+        input_shape = x.shape
+        batch_size, sequence_length, embed_dim = input_shape
+
+        intermediate_head_split_shape = (batch_size, sequence_length, self.num_heads, self.head_dim)
+
+        # Copying the input into query, key, value for the multihead input
+        query, key, value = self.attention_weights(x).chunk(3, dim=-1)
+
+        query = query.view(intermediate_head_split_shape).transpose(1, 2)
+        key = key.view(intermediate_head_split_shape).transpose(1, 2)
+        value = value.view(intermediate_head_split_shape).transpose(1, 2)
+
+        # Computing the matrix multiplication for the arg of softmax (Q * K.transpose())
+        softmax_arg = query @ key.transpose(-1, -2)
+
+        if causal_mask:
+            # Setting a mask of upper diagnol commponents (above the principal diagnol)
+            mask = torch.ones_like(softmax_arg, dtype=torch.bool).triu(1)
+            softmax_arg.masked_fill_(mask, -torch.inf)
+
+        softmax_arg /= torch.sqrt(self.head_dim)
+
+        softmax_output = nn.functional.softmax(softmax_arg, dim=-1)
+
+        attention = softmax_output @ value
+
+        attention = attention.transpose(1, 2)
+
+        multihead_attention_input = attention.reshape(input_shape)
+
+        output = self.multihead_attention_weights(multihead_attention_input)
+
+        return output
+
+if __name__ == '__main__':
+    l = nn.Linear(3, 6, bias=False)
+    print(l.weight.shape)
+    o = l(torch.rand([5, 5, 3]))
+    print(o.shape)
+    # l = np.random.rand(3, 64, 64)
+    # a = _ConvolutionArithmetic(3, 64, (3, 3), 1, padding_type='valid')
+    # output = a(l)
+    # output = output.sum()
+    # output.backward()
+    # print(f"dO / dW:\n{a.weights.grad}\ndO / dB:\n{a.bias.grad}")
+    # hello_my_dear_friend_encoded = torch.Tensor([[0.5, 0.1, 0.4, 0.3], [0.2, 0.3, 0.1, 0.7], [0.6, 0.9, 0.3, 0.1], 	[0.4, 0.2, 0.5, 0.8]])
+    # self_attention = _AttentionArithmetic(*hello_my_dear_friend_encoded.shape)
+    # output = self_attention(hello_my_dear_friend_encoded)
+    # print(output)
+
+    # fig = plt.figure()
+    # ax1 = fig.add_subplot(111)
+    # ax1.imshow(output)
+    # ax1.set_aspect('auto')
+    # fig.savefig('equal.png')
+
+
 
     
 
