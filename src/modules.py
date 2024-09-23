@@ -36,10 +36,10 @@ class ResNetBlock(nn.Module):
     def fuse_time_embedding(self, time_embedding, time_step, x):
         return x + time_embedding[time_step]
 
-    def build_sub_block(self):
+    def build_sub_block(self, in_dim, out_dim, groups = None):
         return nn.Sequential(
-            ConvolutionalNeuralNetwork_2D(self.in_dim, self.out_dim, (3,3), padding_type='same'),
-            nn.GroupNorm(self.num_groups, self.out_dim),
+            ConvolutionalNeuralNetwork_2D(in_dim, out_dim, (3,3), padding_type='same'),
+            nn.GroupNorm(groups, out_dim),
             nn.SiLU()
         )
     
@@ -95,7 +95,6 @@ class SelfAttentionBlock(nn.Module):
         x = x.view((n,c,h,w))
         
         return self.attention_block_last(x) + residue_end
-
 
 class UnetOutput(nn.Module):
     def __init__(self, in_channels, out_channels):
