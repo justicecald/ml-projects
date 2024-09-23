@@ -34,7 +34,7 @@ class UnetContructor(nn.Module):
 
     def up_sample(dim, out_dim = None):
         return nn.Sequential(
-            nn.Upsample(scale_factor = 2, mode = 'nearest'),
+            nn.Upsample(scale_factor=2, mode='nearest'),
             ConvolutionalNeuralNetwork_2D(dim, out_dim if out_dim else dim, (3, 3), padding_type='same')
             # Reference code: nn.Conv2d(dim, out_dim if out_dim else dim, 3, padding = 1)
         )
@@ -59,6 +59,11 @@ class UnetContructor(nn.Module):
     def apply_down_sample(self, out_channels):
         self.module_list.append(
             self.up_sample()
+        )
+
+    def apply_output_layer(self):
+        self.module_list.append(
+            UnetOutput()
         )
 
     def forward(self, x):

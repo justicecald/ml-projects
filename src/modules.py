@@ -25,7 +25,7 @@ class ResNetBlock(nn.Module):
 
         self.block_one = self.build_sub_block(self.in_dim, self.out_dim, groups=self.num_groups)
         self.block_two = self.build_sub_block(self.out_dim, self.out_dim, groups=self.num_groups)
-        self.residual_conv = ConvolutionalNeuralNetwork_2D() if self.in_dim != self.out_dim else nn.Identity()
+        self.residual_conv = ConvolutionalNeuralNetwork_2D(self.in_dim, self.out_dim, (1,1)) if self.in_dim != self.out_dim else nn.Identity()
 
     def apply_time_embedding(self):
         self.module_list.append(
@@ -42,19 +42,73 @@ class ResNetBlock(nn.Module):
             nn.GroupNorm(self.num_groups, self.out_dim),
             nn.SiLU()
         )
+    
+    def forward(self, x, time_emb = None):
+        scale_shift = None
+        if self and time_emb:
+            time_emb = self.mlp(time_emb)
+            # Add two dimensions to time_emb
+            time_emb = rearrange(time_emb, 'b c -> b c 1 1')
+            # Divide the time embedding into two parts along the channel dimension
+            scale_shift = time_emb.chunk(2, dim = 1)
+
+        h = self.block_one(x, scale_shift = scale_shift)
+        h = self.block_two(h)
+
+        return h + self.residual_conv(x)
 
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, batch_dim, input_dim, embed_dim, num_heads = 1):
+    def __init__(self, input_dim, embed_dim, num_heads = 1):
         super(SelfAttentionBlock, self).__init__()
         self.num_heads = num_heads
         self.in_dim = input_dim
-        self.batch_dim = batch_dim
         self.embedding_dim = embed_dim
+        self.channels = self.in_dim * self.num_heads
 
-        self.attention_block = nn.Sequential(
-            nn.GroupNorm(num_groups=8),
-            _AttentionArithmetic(batch_dim=0, embed_dim=0, num_heads=self.num_heads)
+        self.attention_block_one = nn.Sequential(
+            nn.GroupNorm(8, self.channels, eps=1e-6),
+            ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1))
         )
+
+        self.attention_block_two = nn.Sequential(
+            nn.LayerNorm(self.channels),
+            _AttentionArithmetic(1, self.channels, self.num_heads)
+        )
+
+        self.attention_block_last = ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1))
+
+    def forward(self, x: torch.Tensor):
+        residue_end = x
+        x = self.attention_block_one(x)
+
+        n, c, h, w = x.shape
+
+        x = x.view((n, c, h*w))
+        x = x.transpose(-1, -2)
+
+        residue_after_attention = x
+
+        x = self.attention_block_two(x)
+        x += residue_after_attention
+
+        x = x.transpose(-1, -2)
+        x = x.view((n,c,h,w))
+        
+        return self.attention_block_last(x) + residue_end
+
+
+class UnetOutput(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(UnetOutput, self).__init__()
+        self.group_norm = nn.GroupNorm(32, in_channels)
+        self.conv = ConvolutionalNeuralNetwork_2D(in_channels, out_channels, (3,3), padding_type='same')
+
+    def forward(self, x):
+        x = self.group_norm(x)
+        x = nn.functional.silu(x)
+        x = self.conv(x)
+
+        return x
 
 if __name__ == "__main__":
     # l = np.random.rand(3, 64, 64)
