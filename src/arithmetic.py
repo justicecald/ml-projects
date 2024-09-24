@@ -118,9 +118,8 @@ class _ConvolutionArithmetic(nn.Module):
         return output.backward(gradient=Tensor(np.ones(tuple([d for d in output.shape]))))
 
 class _AttentionArithmetic(nn.Module):
-    def __init__(self, batch_dim, embed_dim, num_heads):
+    def __init__(self, embed_dim, num_heads):
         super(_AttentionArithmetic, self).__init__()
-        self.batch_dim = torch.Tensor([batch_dim])
         self.embed_dim = torch.Tensor([embed_dim])
         self.num_heads = torch.Tensor([num_heads])
         self.bias = None
@@ -173,28 +172,6 @@ class _AttentionArithmetic(nn.Module):
         output = self.multihead_attention_weights(multihead_attention_input)
 
         return output
-
-if __name__ == '__main__':
-    l = nn.Linear(3, 6, bias=False)
-    print(l.weight.shape)
-    o = l(torch.rand([5, 5, 3]))
-    print(o.shape)
-    # l = np.random.rand(3, 64, 64)
-    # a = _ConvolutionArithmetic(3, 64, (3, 3), 1, padding_type='valid')
-    # output = a(l)
-    # output = output.sum()
-    # output.backward()
-    # print(f"dO / dW:\n{a.weights.grad}\ndO / dB:\n{a.bias.grad}")
-    # hello_my_dear_friend_encoded = torch.Tensor([[0.5, 0.1, 0.4, 0.3], [0.2, 0.3, 0.1, 0.7], [0.6, 0.9, 0.3, 0.1], 	[0.4, 0.2, 0.5, 0.8]])
-    # self_attention = _AttentionArithmetic(*hello_my_dear_friend_encoded.shape)
-    # output = self_attention(hello_my_dear_friend_encoded)
-    # print(output)
-
-    # fig = plt.figure()
-    # ax1 = fig.add_subplot(111)
-    # ax1.imshow(output)
-    # ax1.set_aspect('auto')
-    # fig.savefig('equal.png')
 
 
 
