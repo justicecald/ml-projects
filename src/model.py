@@ -5,10 +5,6 @@ from torch import nn
 from convolution import ConvolutionalNeuralNetwork_2D
 from arithmetic import _AttentionArithmetic
 from modules import *
-
-from einops import rearrange
-from einops.layers.torch import Rearrange
-
 import matplotlib.pyplot as plt
 
 class SwitchSequential(nn.Sequential):
@@ -21,54 +17,105 @@ class SwitchSequential(nn.Sequential):
         return x
 
 class UnetContructor(nn.Module):
-    def __init__(self, in_channels, out_channels, time_embedding, num_heads=None, t_emb_dim=None):
+    def __init__(self):
         super(UnetContructor, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.num_heads = num_heads
-        self.embedding_dim = t_emb_dim
-        self.time_embedding = time_embedding
 
-        self.encoder = nn.ModuleList([
-            SwitchSequential(ConvolutionalNeuralNetwork_2D(4, 320, (3,3), padding_type='same')),#nn.Conv2d(4, 320, kernel_size=3, padding=1)),
+        self.encoder = nn.Sequential([
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ConvolutionalNeuralNetwork_2D(3, 64, (3,3), padding_type='same')),
             
-            # (Batch_Size, 320, Height / 8, Width / 8) -> # (Batch_Size, 320, Height / 8, Width / 8) -> (Batch_Size, 320, Height / 8, Width / 8)
-            SwitchSequential(ResNetBlock(320, 320), SelfAttentionBlock(8, 40)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(64, 64), SelfAttentionBlock(32, 4)),
             
-            # (Batch_Size, 320, Height / 8, Width / 8) -> # (Batch_Size, 320, Height / 8, Width / 8) -> (Batch_Size, 320, Height / 8, Width / 8)
-            SwitchSequential(ResNetBlock(320, 320), SelfAttentionBlock(8, 40)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(64, 64), SelfAttentionBlock(32, 4)),
             
-            # (Batch_Size, 320, Height / 8, Width / 8) -> (Batch_Size, 320, Height / 16, Width / 16)
-            SwitchSequential(nn.Conv2d(320, 320, kernel_size=3, stride=2, padding=1)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1)),
             
-            # (Batch_Size, 320, Height / 16, Width / 16) -> (Batch_Size, 640, Height / 16, Width / 16) -> (Batch_Size, 640, Height / 16, Width / 16)
-            SwitchSequential(ResNetBlock(320, 640), SelfAttentionBlock(8, 80)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(64, 128), SelfAttentionBlock(64, 4)),
             
-            # (Batch_Size, 640, Height / 16, Width / 16) -> (Batch_Size, 640, Height / 16, Width / 16) -> (Batch_Size, 640, Height / 16, Width / 16)
-            SwitchSequential(ResNetBlock(640, 640), SelfAttentionBlock(8, 80)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(128, 128), SelfAttentionBlock(64, 4)),
             
-            # (Batch_Size, 640, Height / 16, Width / 16) -> (Batch_Size, 640, Height / 32, Width / 32)
-            SwitchSequential(nn.Conv2d(640, 640, kernel_size=3, stride=2, padding=1)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1)),
             
-            # (Batch_Size, 640, Height / 32, Width / 32) -> (Batch_Size, 1280, Height / 32, Width / 32) -> (Batch_Size, 1280, Height / 32, Width / 32)
-            SwitchSequential(ResNetBlock(640, 1280), SelfAttentionBlock(8, 160)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(128, 256), SelfAttentionBlock(64, 4)),
             
-            # (Batch_Size, 1280, Height / 32, Width / 32) -> (Batch_Size, 1280, Height / 32, Width / 32) -> (Batch_Size, 1280, Height / 32, Width / 32)
-            SwitchSequential(ResNetBlock(1280, 1280), SelfAttentionBlock(8, 160)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(256, 256), SelfAttentionBlock(64, 4)),
             
-            # (Batch_Size, 1280, Height / 32, Width / 32) -> (Batch_Size, 1280, Height / 64, Width / 64)
-            SwitchSequential(nn.Conv2d(1280, 1280, kernel_size=3, stride=2, padding=1)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(nn.Conv2d(256, 256, kernel_size=3, stride=2, padding=1)),
             
-            # (Batch_Size, 1280, Height / 64, Width / 64) -> (Batch_Size, 1280, Height / 64, Width / 64)
-            SwitchSequential(ResNetBlock(1280, 1280)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(256, 512), SelfAttentionBlock(128, 4)),
             
-            # (Batch_Size, 1280, Height / 64, Width / 64) -> (Batch_Size, 1280, Height / 64, Width / 64)
-            SwitchSequential(ResNetBlock(1280, 1280)),
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(ResNetBlock(512, 512), SelfAttentionBlock(128, 4)),
+
+            # <ADD DIM BREAKDOWN> 
+            SwitchSequential(nn.Conv2d(512, 512, kernel_size=3, stride=2, padding=1))
         ])
 
         # TODO
-        self.bottleneck = None
-        self.decoder = None
+        self.bottleneck = SwitchSequential(
+            # <ADD DIM BREAKDOWN>
+            ResNetBlock(512, 512), 
+            
+            # <ADD DIM BREAKDOWN>
+            SelfAttentionBlock(128, 4), 
+            
+            # <ADD DIM BREAKDOWN>
+            ResNetBlock(512, 512), 
+        )
+
+        self.decoder = nn.Sequential([
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(1024, 512)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(1024, 512)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(1024, 512), self.up_sample(512)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(1024, 512), SelfAttentionBlock(8, 160)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(1024, 512), SelfAttentionBlock(8, 160)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(768, 512), SelfAttentionBlock(8, 160), self.up_sample(512)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(768, 256), SelfAttentionBlock(8, 80)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(512, 256), SelfAttentionBlock(8, 80)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(384, 256), SelfAttentionBlock(8, 80), self.up_sample(256)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(384, 128), SelfAttentionBlock(8, 40)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(256, 128), SelfAttentionBlock(8, 40)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(192, 128), SelfAttentionBlock(8, 40), self.up_sample(128)),
+
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(192, 64), SelfAttentionBlock(8, 40)),
+            
+            # <ADD DIM BREAKDOWN>
+            SwitchSequential(ResNetBlock(128, 64), SelfAttentionBlock(8, 40))
+        ])
 
     def up_sample(dim, out_dim = None):
         return nn.Sequential(
@@ -94,5 +141,18 @@ class UnetContructor(nn.Module):
             x = torch.cat((x, skip_connections.pop()), dim=1) 
             x = layers(x, time)
         
+        return x
+
+class UnetOutput(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(UnetOutput, self).__init__()
+        self.group_norm = nn.GroupNorm(8, in_channels)
+        self.conv = ConvolutionalNeuralNetwork_2D(in_channels, out_channels, (3,3), padding_type='same')
+
+    def forward(self, x):
+        x = self.group_norm(x)
+        x = nn.functional.silu(x)
+        x = self.conv(x)
+
         return x
     

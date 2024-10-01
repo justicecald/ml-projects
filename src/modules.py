@@ -6,21 +6,23 @@ from convolution import ConvolutionalNeuralNetwork_2D
 from arithmetic import _AttentionArithmetic
 from linear import LinearNeuralNetwork
 
-from einops import rearrange
-from einops.layers.torch import Rearrange
-
 import matplotlib.pyplot as plt
 
 def time_position_embedding(time_steps, time_embed_dim):
     denom_fact = 10000 ** (torch.arange(start=0, end=(time_embed_dim//2)) / (time_embed_dim // 2))
     time_embedding = time_steps[:, None].repeat(time_embed_dim//2, 1) / denom_fact
 
-    print(f"Denominator Shape: {denom_fact.shape}\n")
-    print(f"Time Embedding Shape: {time_embedding.shape}")
-
     output = torch.zeros(len(time_steps), time_embed_dim)
     output[:, ::2] = torch.sin(time_embedding)
     output[:, 1::2] = torch.cos(time_embedding)
+
+    print(f"Time Embedding Shape: {output.shape}")
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.imshow(output)
+    ax1.set_aspect('auto')
+    fig.savefig('time.png')
 
     return output
 
@@ -74,12 +76,11 @@ class ResNetBlock(nn.Module):
         return merged + self.residual_conv(residue)
 
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, input_dim, embed_dim, num_heads):
+    def __init__(self, embed_dim, num_heads):
         super(SelfAttentionBlock, self).__init__()
         self.num_heads = num_heads
-        self.in_dim = input_dim
         self.embedding_dim = embed_dim
-        self.channels = self.in_dim * self.num_heads
+        self.channels = self.embedding_dim * self.num_heads
 
         self.attention_block_one = nn.Sequential(
             nn.GroupNorm(8, self.channels, eps=1e-6),
@@ -88,7 +89,7 @@ class SelfAttentionBlock(nn.Module):
 
         self.attention_block_two = nn.Sequential(
             nn.LayerNorm(self.channels),
-            _AttentionArithmetic(self.channels, self.num_heads)
+            _AttentionArithmetic(self.embedding_dim, self.num_heads)
         )
 
         self.attention_block_last = ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1))
@@ -111,19 +112,3 @@ class SelfAttentionBlock(nn.Module):
         x = x.view((n,c,h,w))
         
         return self.attention_block_last(x) + residue_end
-
-class UnetOutput(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(UnetOutput, self).__init__()
-        self.group_norm = nn.GroupNorm(32, in_channels)
-        self.conv = ConvolutionalNeuralNetwork_2D(in_channels, out_channels, (3,3), padding_type='same')
-
-    def forward(self, x):
-        x = self.group_norm(x)
-        x = nn.functional.silu(x)
-        x = self.conv(x)
-
-        return x
-
-# if __name__ == "__main__":
-#     pass
