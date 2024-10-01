@@ -8,21 +8,19 @@ from linear import LinearNeuralNetwork
 
 import matplotlib.pyplot as plt
 
-def time_position_embedding(time_steps, time_embed_dim):
-    denom_fact = 10000 ** (torch.arange(start=0, end=(time_embed_dim//2)) / (time_embed_dim // 2))
-    time_embedding = time_steps[:, None].repeat(time_embed_dim//2, 1) / denom_fact
+torch.set_default_device("mps")
 
-    output = torch.zeros(len(time_steps), time_embed_dim)
+def time_position_embedding(ts_arr, time_embed_dim, device):
+    ts_arr = torch.Tensor(ts_arr).to(device=device)
+    
+    denom_fact = 10000 ** (torch.arange(start=0, end=(time_embed_dim // 2)) / (time_embed_dim // 2))
+    time_embedding = ts_arr[:, None].repeat(time_embed_dim//2, 1) / denom_fact
+
+    output = torch.zeros(len(ts_arr) * (time_embed_dim // 2), time_embed_dim)
     output[:, ::2] = torch.sin(time_embedding)
     output[:, 1::2] = torch.cos(time_embedding)
 
     print(f"Time Embedding Shape: {output.shape}")
-
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    ax1.imshow(output)
-    ax1.set_aspect('auto')
-    fig.savefig('time.png')
 
     return output
 

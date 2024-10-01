@@ -10,6 +10,8 @@ from collections import *
 Referencing:
 - A guide to convolution arithmetic for deep learning (https://arxiv.org/pdf/1603.07285)
 """
+torch.set_default_device("mps")
+
 class _ConvolutionArithmetic(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding_type='valid'):
         super(_ConvolutionArithmetic, self).__init__()
