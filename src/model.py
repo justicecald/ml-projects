@@ -25,7 +25,7 @@ class UnetContructor(nn.Module):
         self.UpSampleBlock2 = self.up_sample(256)
         self.UpSampleBlock3 = self.up_sample(128)
 
-        self.encoder = nn.Sequential([
+        self.encoder = nn.Sequential(
             # <ADD DIM BREAKDOWN> 
             SwitchSequential(ConvolutionalNeuralNetwork_2D(3, 64, (3,3), padding_type='same')),
             
@@ -64,7 +64,7 @@ class UnetContructor(nn.Module):
 
             # <ADD DIM BREAKDOWN> 
             SwitchSequential(nn.Conv2d(512, 512, kernel_size=3, stride=2, padding=1))
-        ])
+        )
 
         # TODO
         self.bottleneck = SwitchSequential(
@@ -78,7 +78,7 @@ class UnetContructor(nn.Module):
             ResNetBlock(512, 512), 
         )
 
-        self.decoder = nn.Sequential([
+        self.decoder = nn.Sequential(
             # <ADD DIM BREAKDOWN>
             SwitchSequential(ResNetBlock(1024, 512)),
             
@@ -120,9 +120,9 @@ class UnetContructor(nn.Module):
             
             # <ADD DIM BREAKDOWN>
             SwitchSequential(ResNetBlock(128, 64), SelfAttentionBlock(32, 4))
-        ])
+        )
 
-    def up_sample(dim, out_dim = None):
+    def up_sample(self, dim, out_dim = None):
         return nn.Sequential(
             nn.Upsample(scale_factor=2, mode='nearest'),
             ConvolutionalNeuralNetwork_2D(dim, out_dim if out_dim else dim, (3, 3), padding_type='same')

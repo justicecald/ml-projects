@@ -23,13 +23,14 @@ class DiffusionModelTrainer:
         self.epochs = epochs
         self.n_mini_batches = num_mini_batches
         self.ds_name = hf_dataset
-        self.load_ds(self.ds_name)
+        self.load_ds()
         self.model = DiffusionModel(1000)
 
-    def load_ds(self, dataset_name: str):
+    def load_ds(self):
         train = load_dataset(self.ds_name, split=f"train[:100]")
         print(len(train))
         self.train = self.transform_ds(train) # Getting us an array of images
+        self.train.to()
 
         test = load_dataset(self.ds_name, split="test[:5]")
         self.test = self.transform_ds(test)
@@ -39,7 +40,7 @@ class DiffusionModelTrainer:
         train = self.train
         test = self.test
         optimizer = torch.optim.Adam(self.model.ddpm.parameters(), lr=2e-4)
-        inc = torch.floor(train.shape[0] / self.n_mini_batches)
+        inc = train.shape[0] // self.n_mini_batches
         num_mini_batches = train.shape[0] // inc
         test_set = test
 
@@ -95,5 +96,5 @@ class DiffusionModelTrainer:
         
         print(f"Final size of dataset: {transformed_train_dataset.shape}")
 
-        return transformed_train_dataset
+        return transformed_train_dataset.to(torch.device("mps"))
 

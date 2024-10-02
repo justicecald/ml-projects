@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import math
 import requests
 from torch import nn
 from convolution import ConvolutionalNeuralNetwork_2D
@@ -33,20 +34,21 @@ class DiffusionModel:
 
     def alpha_bar(self, ts):
         # Product of alphas from 0 to t
-        return torch.cumprod([self.alpha(j) for j in range(ts)])
+        alpha_cum_prod_input = torch.Tensor([self.alpha(j) for j in torch.arange(start=0, end=ts)]).to(self.device)
+        return torch.cumprod(alpha_cum_prod_input, dim=0)
 
     def compute_loss(self, batch: torch.Tensor) -> torch.Tensor:
         """
         Corresponds to Algorithm 1 from (Ho et al., 2020).
         """
         # Get a random time step for each image in the batch
-        ts = torch.randint(0, self.t_range, [batch.shape[0]], device=self.device)
+        ts: torch.Tensor = torch.randint(low=0, high=self.t_range, size=(batch.shape[0],), device=self.device)
         noise_imgs = []
         # Generate noise, one for each image in the batch
         epsilons = torch.randn(batch.shape, device=self.device)
         for i in range(len(ts)):
             a_hat = self.alpha_bar(ts[i])
-            noise_imgs.append((np.sqrt(a_hat) * batch[i]) + (np.sqrt(1 - a_hat) * epsilons[i]))
+            noise_imgs.append((math.sqrt(a_hat[-1]) * batch[i]) + (math.sqrt(1 - a_hat[-1]) * epsilons[i]))
 
         noise_imgs = torch.stack(noise_imgs, dim=0)
         # Run the noisy images through the U-Net, to get the predicted noise
@@ -67,9 +69,9 @@ class DiffusionModel:
             # Get the predicted noise from the U-Net
             e_hat = self.forward(x, t.view(1).repeat(x.shape[0]))
             # Perform the denoising step to take the image from t to t-1
-            pre_scale = 1 / np.sqrt(self.alpha(t))
-            e_scale = (1 - self.alpha(t)) / np.sqrt(1 - self.alpha_bar(t))
-            post_sigma = np.sqrt(self.beta(t)) * z
+            pre_scale = 1 / math.sqrt(self.alpha(t))
+            e_scale = (1 - self.alpha(t)) / math.sqrt(1 - self.alpha_bar(t))
+            post_sigma = math.sqrt(self.beta(t)) * z
             x = pre_scale * (x - e_scale * e_hat) + post_sigma
             return x
 

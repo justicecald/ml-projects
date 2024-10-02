@@ -5,6 +5,7 @@ from torch import nn
 from torch import Tensor, cat, empty, autograd
 import matplotlib.pyplot as plt
 from collections import *
+from linear import LinearNeuralNetwork
 
 """
 Referencing:
@@ -20,51 +21,40 @@ class _ConvolutionArithmetic(nn.Module):
         self.padding_type = padding_type
         self.stride = stride
 
-        self.weights = np.random.rand(self.out_channels, self.in_channels, *kernel_size) * np.sqrt(2 / in_channels)
-        self.weights = Tensor(self.weights)
-        self.weights.requires_grad_()
+        weights = torch.Tensor(out_channels, in_channels, *kernel_size).to(torch.device("mps"))
+        self.weights = nn.Parameter(weights)
+        nn.init.kaiming_uniform_(self.weights, a=np.sqrt(5))
 
-        self.bias = np.zeros(self.out_channels) * np.sqrt(2 / in_channels)
-        self.bias = Tensor(self.bias)
-        self.bias.requires_grad_()
-        
-        print(f"Weight Shape: {self.weights.shape}")
-    
-    @property
-    def state_dict(self):
-        return OrderedDict({
-            "weight": self.weights,
-            "bias": self.bias
-        })
+        bound = 1 / np.sqrt(self.out_channels)
+        bias = torch.Tensor(self.out_channels).to(torch.device("mps"))
+        self.bias = nn.Parameter(bias)
+        nn.init.uniform_(self.bias, -bound, bound)
     
     def padding_2d(self, input, kernel, stride, padding_type='valid'):
         """
         Using zero padding mode, i.e., creating desired size for output
         """
-        print(f"(Padding Input): {input.shape}")
 
-        output = []
+        output = None
 
         if padding_type == 'valid':
             return input, input.shape
         elif padding_type == 'same':
             if stride == 1:
-                vertical_padding_size = int(np.floor(kernel.shape[0] / 2))
-                horizontal_padding_size = int(np.floor(kernel.shape[1] / 2))
+                vertical_padding_size = int(np.floor(kernel.shape[1] / 2))
+                horizontal_padding_size = int(np.floor(kernel.shape[2] / 2))
                 for c in range(input.shape[0]):
-                    output.append(np.pad(input[c, :, :], (vertical_padding_size, horizontal_padding_size), mode ='constant'))
-
-                output = Tensor(np.array(output))
-
-                print(f"Padding Dims: (vert) {vertical_padding_size} | (horiz) {horizontal_padding_size}")
-
-                print(f"(Padding Output): {output.shape}")
+                    pad = (vertical_padding_size, horizontal_padding_size, vertical_padding_size, horizontal_padding_size)
+                    if not hasattr(output, 'shape'):
+                        output = nn.functional.pad(input, pad, "constant", 0).to(torch.device("mps"))
+                    else:
+                        torch.cat((output, nn.functional.pad(input, pad, "constant", 0).to(torch.device("mps"))), dim=0)
 
                 return output, output.shape
             
             elif stride > 1:
                 print("Non-unit strides not supported at this time")
-                return
+                return None, None
 
     def channel_convolution_2D(self, input, kernel, stride=1):
         """
@@ -74,28 +64,23 @@ class _ConvolutionArithmetic(nn.Module):
             print('Non-unit stride not supported for convolution layer')
             return 
 
-        w_o = (input.shape[1] - kernel.shape[1]) + 1
-        conv_output = Tensor(np.zeros((w_o, w_o)))
+        w_o = (input.shape[2] - kernel.shape[2]) + 1
+        conv_output = torch.zeros((input.shape[0], w_o, w_o))
 
-        # print(f"Channel Convolutional Output Size: {conv_output.shape}")
-
-
-        conv_width = input.shape[2]
-        conv_height = input.shape[1]
+        conv_width = input.shape[3]
+        conv_height = input.shape[2]
 
         i = 0
         j = 0
 
-        # print(f"Shapes: (i): {input.shape}, (k): {kernel.shape}")
-
-        while (j + (kernel.shape[1])) <= conv_width:
-            j_end = j + (kernel.shape[1])
-            while (i + (kernel.shape[1])) <= conv_height:
-                i_end = i + (kernel.shape[1])
-                input_conv_tensor = Tensor(input[:, j:j_end, i:i_end])
+        while (j + (kernel.shape[2])) <= conv_width:
+            j_end = j + (kernel.shape[2])
+            while (i + (kernel.shape[2])) <= conv_height:
+                i_end = i + (kernel.shape[2])
+                input_conv_tensor = input[:, :, j:j_end, i:i_end].to(torch.device("mps"))
                 prod = input_conv_tensor * kernel
-                conv_prod_sum = prod.sum()
-                conv_output[i, j] = conv_prod_sum
+                conv_prod_sum = prod.sum((3, 2, 1))
+                conv_output[:, i, j] = conv_prod_sum
                 i += 1
             j += stride
             i = 0
@@ -103,40 +88,40 @@ class _ConvolutionArithmetic(nn.Module):
 
     def perform_convolution_2D(self, input, kernel, stride):
         # Modifying the input as needed
-        input, in_shape = self.padding_2d(input, self.weights[0], stride=stride, padding_type=self.padding_type)
-        w_o = (input.shape[1] - kernel.shape[1]) + 1
-        conv_output = Tensor(np.zeros((kernel.shape[0], w_o, w_o)))
+        input, in_shape = self.padding_2d(input, self.weights, stride=stride, padding_type=self.padding_type)
+        w_o = (input.shape[3] - kernel.shape[2]) + 1
+        conv_output = []
 
         for c in range(kernel.shape[0]):
-            conv_output[c, :, :] = self.channel_convolution_2D(input, kernel[c, :, :, :], stride=stride)
-
+            print(f"Applying filter {c+1}")
+            conv_output.append(self.channel_convolution_2D(input, kernel[c, :, :, :], stride=stride))
+        
+        conv_output = torch.stack(conv_output).to(torch.device("mps"))
         print(f"Output Shape: {conv_output.shape}")
         return conv_output
 
     def forward(self, x):
-        return self.perform_convolution_2D(x, self.weights, stride=1)
-    
-    def backward(self, output):
-        return output.backward(gradient=Tensor(np.ones(tuple([d for d in output.shape]))))
+        x = self.perform_convolution_2D(x, self.weights, stride=1)
+        return x
 
 class _AttentionArithmetic(nn.Module):
     def __init__(self, embed_dim, num_heads):
         super(_AttentionArithmetic, self).__init__()
-        self.embed_dim = torch.Tensor([embed_dim])
-        self.num_heads = torch.Tensor([num_heads])
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
         self.bias = None
 
         # Defining the Wq, Wk, Wv matrices as a single linear layer:
         # Referencing how they are used individually as matrices (d_embed x d_embed), we will "concatenate" the matrices along dim=1
-        self.attention_weights = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
+        self.attention_weights = LinearNeuralNetwork(self.embed_dim, 3 * self.embed_dim)
 
         # Defining Wo as a single linear layer
-        self.multihead_attention_weights = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.multihead_attention_weights = LinearNeuralNetwork(self.embed_dim, self.embed_dim)
 
         # Dimensions of heads as defined
         self.head_dim = self.embed_dim // self.num_heads
     
-    def forward(self, x, causal_mask=False):
+    def forward(self, x: torch.Tensor, causal_mask=False):
         query: torch.Tensor
         key: torch.Tensor
         value: torch.Tensor

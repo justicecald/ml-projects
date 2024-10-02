@@ -13,24 +13,16 @@ class LinearNeuralNetwork(nn.Module):
         super(LinearNeuralNetwork, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weights = np.random.rand(self.out_features, self.in_features) * np.sqrt(2 / in_features)
-        self.bias = np.random.rand(self.out_features) * np.sqrt(2 / in_features)
 
-        print(f"Dimensions:\n- In Features: {self.in_features}\n- Out Features: {self.out_features}\n- Weights: {self.weights.shape}\n- Bias: {self.bias.shape}")
+        weights = torch.Tensor(self.out_features, self.in_features)
+        self.weights = nn.Parameter(weights)
+        nn.init.kaiming_uniform_(self.weights, a=np.sqrt(5))
+        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weights)
 
-    def state_dict(self):
-        return OrderedDict({
-            "weight": Tensor(self.weights),
-            "bias": Tensor(self.bias)
-        })
+        bound = 1 / np.sqrt(fan_in)
+        bias = torch.Tensor(self.out_features)
+        self.bias = nn.Parameter(bias)
+        nn.init.uniform_(self.bias, -bound, bound)
     
     def forward(self, x):
-        return Tensor(
-            np.dot(self.weight, x) + self.bias
-        )
-
-# if __name__ == "__main__":
-#     ll = LinearNeuralNetwork(5, 3)
-#     ll2 = nn.Linear(5, 3)
-#     print(ll.state_dict())
-#     print(ll2.state_dict())
+        return torch.mm(x, self.weights.t()) + self.bias

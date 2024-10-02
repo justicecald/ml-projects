@@ -12,4 +12,4 @@ from arithmetic import *
 class ConvolutionalNeuralNetwork_2D(_ConvolutionArithmetic):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding_type='valid'):
-        super(ConvolutionalNeuralNetwork_2D, self).__init__(in_channels, out_channels, kernel_size, stride, padding_type=padding_type)
+        super(ConvolutionalNeuralNetwork_2D, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding_type=padding_type)
