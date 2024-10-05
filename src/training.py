@@ -27,10 +27,10 @@ class DiffusionModelTrainer:
         self.model = DiffusionModel(1000)
 
     def load_ds(self):
-        train = load_dataset(self.ds_name, split=f"train[:100]")
+        train = load_dataset(self.ds_name, split=f"train[:40]")
         print(len(train))
         self.train = self.transform_ds(train) # Getting us an array of images
-        self.train.to()
+        self.train.to(torch.device("mps"))
 
         test = load_dataset(self.ds_name, split="test[:5]")
         self.test = self.transform_ds(test)
@@ -47,14 +47,14 @@ class DiffusionModelTrainer:
         for e in range(self.epochs):
             for m in range(0, num_mini_batches):
                 X_Train = train[(inc * m):(inc * (m+1)), :, :, :]
-                print(f"X_Train Mini Batch [{m}] Size: {X_Train.shape}")
+                print(f"X_Train Mini Batch [{m + 1}] Size: {X_Train.shape}")
                 loss = self.model.compute_loss(X_Train)
+                print(f"Epoch [{e + 1}]: Mini Batch [{m + 1}]: Loss == {loss}")
+
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                optimizer.zero_grad()
 
-                if m % 5 == 0:
-                    print(f"Epoch [{e + 1}]: Mini Batch [{m + 1}]: Loss == {loss}")
             
             if train.size[0] % inc != 0: # If the size of the mini batches don't completely cover the training set, do one more step
                 X_Train = train[(inc * num_mini_batches):, :, :, :]
@@ -72,13 +72,15 @@ class DiffusionModelTrainer:
         for i in range(len(dataset)):
             url = dataset[i]["url"]
             print(f"Attempting to download and process image [{i + 1}] | {url} ...")
-            size = 512
+            size = 32
             try:
                 image = Image.open(requests.get(url, stream=True).raw)
                 transform = Compose([
                     Resize(size),
                     CenterCrop(size),
-                    ToTensor(), # turn into torch Tensor of shape CHW, divide by 255       
+                    ToTensor(), # turn into torch Tensor of shape CHW, divide by 255,
+                    Lambda(lambda t: t / 255),
+                    Lambda(lambda t: (t * 2) - 1)  
                 ])
 
                 transformed_image = transform(image).unsqueeze(0)

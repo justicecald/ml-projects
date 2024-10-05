@@ -18,5 +18,5 @@ from tqdm.auto import tqdm
 torch.set_default_device("mps")
 
 if __name__ == "__main__":
-    model_trainer = DiffusionModelTrainer(10, 20, hf_dataset="dalle-mini/open-images")
+    model_trainer = DiffusionModelTrainer(10, 10, hf_dataset="dalle-mini/open-images")
     model_trainer.train_model()

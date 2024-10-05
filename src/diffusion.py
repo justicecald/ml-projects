@@ -54,7 +54,8 @@ class DiffusionModel:
         # Run the noisy images through the U-Net, to get the predicted noise
         e_hat = self.forward(noise_imgs, ts)
         # Calculate the loss, that is, the MSE between the predicted noise and the actual noise
-        loss = nn.MSELoss(e_hat.reshape(-1, batch.size), epsilons.reshape(-1, batch.size))
+        compute_loss = nn.MSELoss()
+        loss = compute_loss(e_hat.reshape(-1, batch.size), epsilons(-1, batch.size))
         return loss
 
     def reverse_diffusion_step(self, x: torch.Tensor, t: torch.Tensor):

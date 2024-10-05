@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import math
 from torch import nn
 from convolution import ConvolutionalNeuralNetwork_2D
 from arithmetic import _AttentionArithmetic
@@ -12,31 +13,31 @@ torch.set_default_device("mps")
 
 def time_position_embedding(ts_arr, time_embed_dim, device):
     ts_arr = torch.Tensor(ts_arr).to(device=device)
-    
-    denom_fact = 10000 ** (torch.arange(start=0, end=(time_embed_dim // 2)) / (time_embed_dim // 2))
-    time_embedding = ts_arr[:, None].repeat(time_embed_dim//2, 1) / denom_fact
+    half_dim = time_embed_dim // 2
 
-    output = torch.zeros(len(ts_arr) * (time_embed_dim // 2), time_embed_dim)
+    denom_array = torch.arange(start=0, end=half_dim)
+
+    embeddings = torch.exp(denom_array * -(math.log(10000) / half_dim - 1))
+    time_embedding = ts_arr[:, None] * embeddings[None, :]
+
+    output = torch.zeros(time_embedding.shape[0], time_embed_dim)
     output[:, ::2] = torch.sin(time_embedding)
     output[:, 1::2] = torch.cos(time_embedding)
-
-    print(f"Time Embedding Shape: {output.shape}")
 
     return output
 
 class ResNetBlock(nn.Module):
-    def __init__(self, input_dim, output_dim, time_emb_dim = None, groups = 8, embed_time: bool = False):
+    def __init__(self, input_dim, output_dim, groups = 8):
         super(ResNetBlock, self).__init__()
         self.in_dim = input_dim
         self.out_dim = output_dim
-        self.t_embed_dim = time_emb_dim
+        self.t_embed_dim = 32
         self.num_groups = groups
-
-        self.embed_time = self.apply_time_embedding() if embed_time else None
 
         self.block_one = self.build_sub_block_one(self.in_dim, self.out_dim, groups=self.num_groups)
         self.block_two = self.build_sub_block_two(self.out_dim, self.out_dim, groups=self.num_groups)
-        self.residual_conv = ConvolutionalNeuralNetwork_2D(self.in_dim, self.out_dim, (1,1)) if self.in_dim != self.out_dim else nn.Identity()
+        self.time_embedding = self.apply_time_embedding()
+        self.residual_conv = ConvolutionalNeuralNetwork_2D(self.in_dim, self.out_dim, (1,1), padding_type='valid') if (self.in_dim != self.out_dim) else nn.Identity()
 
 
     def apply_time_embedding(self):
@@ -60,53 +61,56 @@ class ResNetBlock(nn.Module):
         )
     
     def forward(self, x, time_emb: torch.Tensor = None):
-        
         residue = x
-
         x = self.block_one(x)
 
-        time = self.embed_time(time_emb)
+        time = self.time_embedding(time_emb)
+        print(f"Time Shape: {time.shape}")
 
+        print(f"Fusing input with time...")
         input_with_time = x + time.unsqueeze(-1).unsqueeze(-1)
+        print(f"Input with time shape: {input_with_time.shape}")
         
         merged = self.block_two(input_with_time)
 
-        return merged + self.residual_conv(residue)
+        output = merged + self.residual_conv(residue)
 
+        return output
+    
 class SelfAttentionBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads):
+    def __init__(self, in_dim, embed_dim, num_heads):
         super(SelfAttentionBlock, self).__init__()
         self.num_heads = num_heads
         self.embedding_dim = embed_dim
+        self.in_dim = in_dim
         self.channels = self.embedding_dim * self.num_heads
+        self.num_groups = 2
 
         self.attention_block_one = nn.Sequential(
-            nn.GroupNorm(8, self.channels, eps=1e-6),
-            ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1))
+            nn.GroupNorm(self.num_groups, self.in_dim, eps=1e-6),
+            ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1), padding_type='same')
         )
 
-        self.attention_block_two = nn.Sequential(
-            nn.LayerNorm(self.channels),
-            _AttentionArithmetic(self.embedding_dim, self.num_heads)
-        )
+        self.attention_layer_norm = nn.LayerNorm(self.channels)
 
-        self.attention_block_last = ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1))
+        self.attention_block_two = _AttentionArithmetic(self.in_dim, self.embedding_dim, self.num_heads)
+
+        self.attention_block_last = ConvolutionalNeuralNetwork_2D(self.channels, self.channels, kernel_size=(1,1), padding_type='same')
 
     def forward(self, x: torch.Tensor):
+
         residue_end = x
         x = self.attention_block_one(x)
 
         n, c, h, w = x.shape
 
         x = x.view((n, c, h*w))
-        x = x.transpose(-1, -2)
-
+        x = x.transpose(1, 2)
         residue_after_attention = x
 
-        x = self.attention_block_two(x)
+        x = self.attention_layer_norm(x)
         x += residue_after_attention
 
-        x = x.transpose(-1, -2)
-        x = x.view((n,c,h,w))
+        x = self.attention_block_two(x, (n, c, h, w))
         
         return self.attention_block_last(x) + residue_end
